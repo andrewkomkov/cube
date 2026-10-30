@@ -208,6 +208,10 @@ export class ClickHouseDriver extends BaseDriver implements DriverInterface {
           // specialized converters in Transform.ts key off. Not guaranteed: a readonly user or a
           // driver_factory override still lands on the generic formatter.
           date_time_output_format: 'simple',
+          // The default for 64-bit integers changed in ClickHouse 25.8, and a JSON number above
+          // 2^53 or a long Decimal loses digits when JSON.parse reads it
+          output_format_json_quote_64bit_integers: 1,
+          output_format_json_quote_decimals: 1,
         }),
       },
       // Custom HTTP headers can only be passed via driver_factory, not env vars.

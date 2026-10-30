@@ -406,4 +406,22 @@ describe('ClickHouseDriver', () => {
       }
     });
   });
+
+  it.each([
+    ['UInt64 above 2^53', 'toUInt64(\'9007199254740995\')', '9007199254740995'],
+    ['UInt64 at its maximum', 'toUInt64(\'18446744073709551615\')', '18446744073709551615'],
+    ['Int64 below -2^53', 'toInt64(\'-9007199254740995\')', '-9007199254740995'],
+    ['Int128', 'toInt128(\'170141183460469231731687303715884105727\')', '170141183460469231731687303715884105727'],
+    ['Decimal with 16 digits and more', 'toDecimal128(\'3000000000000.00000003\', 8)', '3000000000000.00000003'],
+    ['Nullable(UInt64) with a value', 'toNullable(toUInt64(\'9007199254740995\'))', '9007199254740995'],
+    ['Nullable(UInt64) with NULL', 'CAST(NULL AS Nullable(UInt64))', null],
+    ['Nullable(Decimal) with NULL', 'CAST(NULL AS Nullable(Decimal(38, 8)))', null],
+    ['a small UInt32', 'toUInt32(5)', '5'],
+    ['Float64', 'toFloat64(1.5)', '1.5'],
+  ])('keeps each digit of %s', async (_name, expr, expected) => {
+    await doWithDriver(async (driver) => {
+      const [row] = await driver.query(`SELECT ${expr} AS v`, []);
+      expect(row).toEqual({ v: expected });
+    });
+  });
 });
