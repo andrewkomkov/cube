@@ -285,6 +285,10 @@ export class ClickHouseQuery extends BaseQuery {
 
   public preAggregationLoadSql(cube: string, preAggregation: EvaluatedPreAggregationDefinition, tableName: string) {
     const sqlAndParams = this.preAggregationSql(cube, preAggregation);
+    // An originalSql table has the columns of the cube SQL, and an index names members, so it needs no sort key
+    if (preAggregation.type === 'originalSql' && !preAggregation.indexes) {
+      return [`CREATE TABLE ${tableName} ENGINE = MergeTree() ORDER BY tuple() ${this.asSyntaxTable} ${sqlAndParams[0]}`, sqlAndParams[1]];
+    }
     if (!preAggregation.indexes) {
       throw new UserError('ClickHouse doesn\'t support pre-aggregations without indexes');
     }
