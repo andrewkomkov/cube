@@ -257,8 +257,10 @@ export class ClickHouseQuery extends BaseQuery {
    ClickHouse uses :
 
      select
-      parseDateTimeBestEffort(arrayJoin(['2017-01-01T00:00:00.000','2017-01-02T00:00:00.000'])) as date_from,
-      parseDateTimeBestEffort(arrayJoin(['2017-01-01T23:59:59.999','2017-01-02T23:59:59.999'])) as date_to
+      parseDateTimeBestEffort(dates.1) as date_from,
+      parseDateTimeBestEffort(dates.2) as date_to
+     from (
+      select arrayJoin(arrayZip(['2017-01-01T00:00:00.000','2017-01-02T00:00:00.000'], ['2017-01-01T23:59:59.999','2017-01-02T23:59:59.999'])) as dates
       ...
    )
    */
@@ -271,7 +273,8 @@ export class ClickHouseQuery extends BaseQuery {
       datesTo.push(to);
     });
 
-    return `SELECT parseDateTimeBestEffort(arrayJoin(['${datesFrom.join('\',\'')}'])) as date_from, parseDateTimeBestEffort(arrayJoin(['${datesTo.join('\',\'')}'])) as date_to`;
+    // Two arrayJoin calls in one SELECT give a cross product of the bounds, so the bounds are joined as pairs
+    return `SELECT parseDateTimeBestEffort(dates.1) as date_from, parseDateTimeBestEffort(dates.2) as date_to FROM (SELECT arrayJoin(arrayZip(['${datesFrom.join('\',\'')}'], ['${datesTo.join('\',\'')}'])) as dates)`;
   }
 
   public concatStringsSql(strings: string[]) {
