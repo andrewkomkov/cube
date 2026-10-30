@@ -30,6 +30,15 @@ cubes:
         type: number
         sql: "{CustomerOrders.orderTotal}"
         sub_query: true
+      - name: totalSpendFiltered
+        type: number
+        sql: "{CustomerOrders.orderTotal}"
+        sub_query: true
+        propagate_filters_to_sub_query: true
+      - name: orderCount
+        type: number
+        sql: "{CustomerOrders.count}"
+        sub_query: true
     measures: []
 
   - name: CustomerOrders
@@ -46,3 +55,5 @@ cubes:
       - name: orderTotal
         type: sum
         sql: amount
+      - name: count
+        type: count

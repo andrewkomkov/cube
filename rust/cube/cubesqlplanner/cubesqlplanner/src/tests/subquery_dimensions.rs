@@ -85,3 +85,53 @@ async fn test_subquery_dimension_in_projection() {
         insta::assert_snapshot!(result);
     }
 }
+
+/// Two subquery dimensions on the same measure join their own subqueries, and each one has to
+/// read its own, in whichever order the query names them.
+#[test]
+fn test_subquery_dimensions_on_one_measure_read_their_own_subqueries() {
+    let schema = MockSchema::from_yaml_file("common/subquery_dimensions.yaml");
+    let test_context = TestContext::new(schema).unwrap();
+
+    for (dimensions, others) in [
+        (vec!["totalSpend", "totalSpendFiltered"], vec!["orderCount"]),
+        (vec!["totalSpendFiltered", "totalSpend"], vec!["orderCount"]),
+        (
+            vec!["totalSpend", "orderCount", "totalSpendFiltered"],
+            vec![],
+        ),
+        (vec!["totalSpendFiltered"], vec!["totalSpend", "orderCount"]),
+    ] {
+        let members = dimensions
+            .iter()
+            .map(|d| format!("  - Customers.{d}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let query_yaml = format!(
+            "dimensions:\n  - Customers.id\n{members}\nfilters:\n  - member: Customers.id\n    operator: gt\n    values:\n      - \"0\"\n"
+        );
+
+        let sql = test_context
+            .build_sql(&query_yaml)
+            .expect("Should generate SQL");
+
+        for dimension in &dimensions {
+            let column = match *dimension {
+                "totalSpend" => "total_spend",
+                "totalSpendFiltered" => "total_spend_filtered",
+                _ => "order_count",
+            };
+            let source = format!("\"Customers_{dimension}_subquery\".\"{column}\"");
+            assert!(
+                sql.contains(&source),
+                "{dimension} must read its own subquery, {source} is missing in: {sql}"
+            );
+        }
+        for other in &others {
+            assert!(
+                !sql.contains(&format!("Customers_{other}_subquery")),
+                "{other} is not in the query: {sql}"
+            );
+        }
+    }
+}
