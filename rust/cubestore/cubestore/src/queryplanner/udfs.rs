@@ -219,18 +219,13 @@ fn calc_intervals(start: NaiveDateTime, end: NaiveDateTime, interval: i32) -> i3
     let months_diff = end.month() as i32 - start.month() as i32;
     let mut total_months = years_diff * 12 + months_diff;
 
-    if total_months > 0 && end.day() < start.day() {
-        total_months -= 1; // If the day in the final date is less, reduce by 1 month
+    // Whole months from start to end: an end before the same day and time of its month is one less
+    if (end.day(), end.time()) < (start.day(), start.time()) {
+        total_months -= 1;
     }
 
-    let rem = months_diff % interval;
-    let mut num_intervals = total_months / interval;
-
-    if num_intervals < 0 && rem == 0 && end.day() < start.day() {
-        num_intervals -= 1;
-    }
-
-    num_intervals
+    // A time before start belongs to the interval that holds it, so this rounds down, not to zero
+    total_months.div_euclid(interval)
 }
 
 /// Calculate date_bin timestamp for source date for year-month interval
@@ -1011,4 +1006,64 @@ pub fn convert_tz_precomputed_shift(
         ScalarBuffer::<i64>::from(result),
         timestamps.nulls().map(|null_buffer| null_buffer.clone()),
     )))
+}
+
+#[cfg(test)]
+mod date_bin_tests {
+    use super::*;
+
+    fn at(date: &str) -> NaiveDateTime {
+        NaiveDateTime::parse_from_str(&format!("{date} 00:00:00"), "%Y-%m-%d %H:%M:%S")
+            .or_else(|_| NaiveDateTime::parse_from_str(date, "%Y-%m-%d %H:%M:%S"))
+            .unwrap()
+    }
+
+    fn nanos(date: &str) -> i64 {
+        at(date).and_utc().timestamp_nanos_opt().unwrap()
+    }
+
+    #[test]
+    fn test_calc_bin_timestamp_ym() {
+        for (origin, source, interval, expected) in [
+            // After the origin
+            ("2025-02-01", "2025-02-01", 3, "2025-02-01"),
+            ("2025-02-01", "2025-04-30", 3, "2025-02-01"),
+            ("2025-02-01", "2025-05-01", 3, "2025-05-01"),
+            // Before the origin
+            ("2026-02-01", "2026-01-31", 3, "2025-11-01"),
+            ("2026-02-01", "2025-11-01", 3, "2025-11-01"),
+            ("2026-02-01", "2025-10-31", 3, "2025-08-01"),
+            ("2026-02-01", "2025-03-01", 3, "2025-02-01"),
+            ("2026-02-01", "2025-02-01", 3, "2025-02-01"),
+            ("2026-02-01", "2025-01-31", 3, "2024-11-01"),
+            // An origin inside of a month
+            ("2025-01-15", "2025-04-14", 3, "2025-01-15"),
+            ("2025-01-15", "2025-04-15", 3, "2025-04-15"),
+            ("2026-02-15", "2025-03-10", 3, "2025-02-15"),
+            ("2026-02-15", "2025-02-15", 3, "2025-02-15"),
+            ("2026-02-15", "2025-02-14", 3, "2024-11-15"),
+            // A time on the day of the origin
+            (
+                "2026-02-01 12:00:00",
+                "2026-02-01 11:59:59",
+                1,
+                "2026-01-01 12:00:00",
+            ),
+            (
+                "2026-02-01 12:00:00",
+                "2026-02-01 12:00:00",
+                1,
+                "2026-02-01 12:00:00",
+            ),
+            // An interval of one month and of one year
+            ("2026-02-01", "2025-03-15", 1, "2025-03-01"),
+            ("2026-01-01", "2024-12-31", 12, "2024-01-01"),
+        ] {
+            assert_eq!(
+                calc_bin_timestamp_ym(at(origin), &nanos(source), interval),
+                at(expected),
+                "origin {origin}, source {source}, interval {interval}"
+            );
+        }
+    }
 }
